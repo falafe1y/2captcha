@@ -20,7 +20,7 @@ void send_request(const std::string& server_address, int port, const std::string
     try {
         char response[2048];
         size_t length = socket.read_some(boost::asio::buffer(response));
-        std::cout << "Response from the server: " << std::string(response, length) << std::endl;
+        std::cout << "Response from the server:\n\n" << std::string(response, length) << std::endl;
     } catch (const boost::system::system_error& e) {
         std::cerr << "Error reading data: " << e.what() << std::endl;
     }
