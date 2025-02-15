@@ -70,10 +70,12 @@ must specify the target site):
 
 ```
 # First terminal
+cd build
 ./server
 ```
 
 ```
 # Second terminal
+cd build
 ./client https://example.com
 ```
