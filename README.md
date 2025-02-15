@@ -77,5 +77,43 @@ cd build
 ```
 # Second terminal
 cd build
-./client https://example.com
+./client https://ip.oxylabs.io
 ```
+
+If you see something like this:
+```
+Connected...
+URL from client: https://ip.oxylabs.io
+Proxy protocol: http
+------------------
+Response from proxy:
+
+REMOTE_ADDR = 54.205.235.55
+REMOTE_PORT = 65258
+REQUEST_METHOD = GET
+REQUEST_URI = /
+REQUEST_TIME_FLOAT = 1739662425.7612944
+REQUEST_TIME = 1739662425
+HTTP_HOST = ip.oxylabs.io
+HTTP_ACCEPT = */*
+```
+
+or this:
+```
+Connected...
+URL from client: https://ip.oxylabs.io
+Proxy protocol: socks5
+------------------
+Response from proxy:
+
+REMOTE_ADDR = 18.188.12.76
+REMOTE_PORT = 51715
+REQUEST_METHOD = GET
+REQUEST_URI = /
+REQUEST_TIME_FLOAT = 1739662428.3189354
+REQUEST_TIME = 1739662428
+HTTP_HOST = ip.oxylabs.io
+HTTP_ACCEPT = */*
+```
+
+then everything is done correctly. It's a success!
