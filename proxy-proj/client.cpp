@@ -3,7 +3,7 @@
 
 using boost::asio::ip::tcp;
 
-void send_request(const std::string& server_address, int port, const std::string& request) {
+void send_request(const std::string& server_address, int port, const std::string& url) {
     boost::asio::io_context io_context;
     tcp::resolver resolver(io_context);
 
@@ -13,12 +13,12 @@ void send_request(const std::string& server_address, int port, const std::string
     tcp::socket socket(io_context);
     boost::asio::connect(socket, endpoints);
 
-    // Sending a request to the server
-    boost::asio::write(socket, boost::asio::buffer(request));
+    // Send URL to the server
+    boost::asio::write(socket, boost::asio::buffer(url));
 
-    // Get response
+    // Response
     try {
-        char response[2048];
+        char response[4096];
         size_t length = socket.read_some(boost::asio::buffer(response));
         std::cout << "Response from the server:\n\n" << std::string(response, length) << std::endl;
     } catch (const boost::system::system_error& e) {
@@ -28,12 +28,16 @@ void send_request(const std::string& server_address, int port, const std::string
     socket.close();
 }
 
-int main() {
-    std::string server_address = "127.0.0.1";   // Server address
-    int server_port = 8080;     // Server port
-    std::string request = "GET / HTTP/1.1\r\nHost: example.com\r\n\r\n"; // Request
+int main(int argc, char* argv[]) {
+    if (argc < 2) {
+        std::cerr << "Usage: " << argv[0] << " <URL>\n";
+        return 1;
+    }
 
-    send_request(server_address, server_port, request);
+    std::string server_address = "127.0.0.1";  
+    int server_port = 8080;
+    std::string url = argv[1];      // URL from terminal argumemnts
 
+    send_request(server_address, server_port, url);
     return 0;
 }

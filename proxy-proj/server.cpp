@@ -12,6 +12,8 @@ struct Proxy {
     std::string ip;
     int port;
     std::string protocol;
+    std::string username;
+    std::string password;
 };
 
 std::vector<Proxy> proxies;
@@ -23,19 +25,32 @@ void load_proxies(const std::string& filename, const std::string& protocol) {
     std::ifstream file(filename);
     std::string line;
     while (std::getline(file, line)) {
+        Proxy proxy;
+
         // Remove protocol (http://, socks5://)
         size_t protocol_pos = line.find("://");
         if (protocol_pos != std::string::npos) {
-            line = line.substr(protocol_pos + 3);
+            proxy.protocol = line.substr(0, protocol_pos);
+            line = line.substr(protocol_pos + 3); // Remove protocol part
+        }
+
+        // Check for user:pass format
+        size_t auth_pos = line.find('@');
+        if (auth_pos != std::string::npos) {
+            std::string auth = line.substr(0, auth_pos); // user:pass
+            size_t colon_pos = auth.find(':');
+            if (colon_pos != std::string::npos) {
+                proxy.username = auth.substr(0, colon_pos);
+                proxy.password = auth.substr(colon_pos + 1);
+            }
+            line = line.substr(auth_pos + 1); // Remove user:pass part
         }
 
         // Find separator between IP and port
         size_t pos = line.find(':');
         if (pos != std::string::npos) {
-            Proxy proxy;
             proxy.ip = line.substr(0, pos); // IP address
             proxy.port = std::stoi(line.substr(pos + 1)); // Port
-            proxy.protocol = protocol;
             proxies.push_back(proxy);
         }
     }
@@ -70,13 +85,20 @@ std::string handle_request(const std::string &url) {
         curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
 
         // Set proxy
-        if (proxy.protocol == "http") {
-            curl_easy_setopt(curl, CURLOPT_PROXY, proxy.ip.c_str());
-            curl_easy_setopt(curl, CURLOPT_PROXYPORT, proxy.port);
-        } else if (proxy.protocol == "socks5") {
+        if (proxy.protocol == "http" || proxy.protocol == "socks5") {
             std::string proxy_address = proxy.ip + ":" + std::to_string(proxy.port);
             curl_easy_setopt(curl, CURLOPT_PROXY, proxy_address.c_str());
-            curl_easy_setopt(curl, CURLOPT_PROXYTYPE, CURLPROXY_SOCKS5);
+
+            // Set proxy type if it's SOCKS5
+            if (proxy.protocol == "socks5") {
+                curl_easy_setopt(curl, CURLOPT_PROXYTYPE, CURLPROXY_SOCKS5);
+            }
+
+            // If there is authentication information
+            if (!proxy.username.empty() && !proxy.password.empty()) {
+                std::string proxy_auth = proxy.username + ":" + proxy.password;
+                curl_easy_setopt(curl, CURLOPT_PROXYUSERPWD, proxy_auth.c_str());
+            }
         }
 
         curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
@@ -97,7 +119,7 @@ std::string handle_request(const std::string &url) {
     return response;
 }
 
-void start_server(int port, std::string url) {
+void start_server(int port) {
     boost::asio::io_context io_context;
     tcp::acceptor acceptor(io_context, tcp::endpoint(tcp::v4(), port));
     std::cout << "Server is listening on port " << port << "...\n";
@@ -107,15 +129,16 @@ void start_server(int port, std::string url) {
         acceptor.accept(socket);
         std::cout << "Connected...\n";
         try {
-            char data[512];
+            char data[1024]; // Increase buffer size for long URLs
             size_t length = socket.read_some(boost::asio::buffer(data));
-            std::string client_request(data, length);
-            std::cout << "Request from client: " << client_request << "\n";
+            std::string client_url(data, length);
+            std::cout << "URL from client: " << client_url << "\n";
 
-            std::cout << "URL: " << url << "\n";
-
-            std::string response = handle_request(url);
+            std::string response = handle_request(client_url);
+            
+            // Just for debugging
             std::cout << "------------------\nResponse from proxy:\n\n" << response << std::endl;
+            
             boost::asio::write(socket, boost::asio::buffer(response));
             socket.close();
         } catch (const std::exception& e) {
@@ -132,6 +155,6 @@ int main() {
         return 1;
     }
     const int port = 8080;
-    start_server(port, "https://ip.oxylabs.io");
+    start_server(port);
     return 0;
 }
