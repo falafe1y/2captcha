@@ -13,19 +13,35 @@ First, install the dependencies:
 - For Ubuntu (Debian):
     ```
     sudo apt update
+    sudo apt install c++
     sudo apt install libboost-all-dev
     sudo apt install libcurl4-openssl-dev
     sudo apt install cmake
+    ```
+
+    or
+
+    ```
+    sudo apt update
+    sudo apt update c++ libboost-all-dev libcurl4-openssl-dev cmake
     ```
 
 - For Arch (Manjaro etc.):
 
     ```
     sudo pacman -Syu
+    sudo pacman -S g++
     sudo pacman -S cmake
     sudo pacman -S curl
     sudo pacman -S openssl
     sudo pacman -S boost boost-libs
+    ```
+
+    or
+
+    ```
+    sudo pacman -Syu
+    sudo pacman g++ cmake curl openssl boost boost-libs
     ```
 
 Okay, secondly, clone this repository:
