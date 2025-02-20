@@ -21,18 +21,18 @@ std::vector<Proxy> proxies;
 size_t current_proxy_index = 0;
 std::mutex proxy_mutex;
 
-// Load proxies from a file
+// load proxies from a file
 void load_proxies(const std::string& filename) {
     std::ifstream file(filename);
     std::string line;
     while (std::getline(file, line)) {
         Proxy proxy;
 
-        // Remove protocol (http://, socks5://)
+        // remove protocol (http://, socks5://)
         size_t protocol_pos = line.find("://");
         if (protocol_pos != std::string::npos) {
             proxy.protocol = line.substr(0, protocol_pos);
-            line = line.substr(protocol_pos + 3);   // Remove protocol part
+            line = line.substr(protocol_pos + 3);   // remove protocol part
         }
 
         size_t auth_pos = line.find('@');
@@ -43,20 +43,20 @@ void load_proxies(const std::string& filename) {
                 proxy.username = auth.substr(0, colon_pos);
                 proxy.password = auth.substr(colon_pos + 1);
             }
-            line = line.substr(auth_pos + 1);   // Remove user:pass part
+            line = line.substr(auth_pos + 1);   // remove user:pass part
         }
 
-        // Find separator between IP and port
+        // find separator between IP and port
         size_t pos = line.find(':');
         if (pos != std::string::npos) {
             proxy.ip = line.substr(0, pos); // IP
-            proxy.port = std::stoi(line.substr(pos + 1));   // Port
+            proxy.port = std::stoi(line.substr(pos + 1));   // port
             proxies.push_back(proxy);
         }
     }
 }
 
-// Select the next proxy (round-robin)
+// select the next proxy (round-robin)
 Proxy get_next_proxy() {
     std::lock_guard<std::mutex> lock(proxy_mutex);
     if (proxies.empty()) throw std::runtime_error("No proxies available");
@@ -70,7 +70,7 @@ size_t write_callback(void* ptr, size_t size, size_t nmemb, std::string* data) {
     return size * nmemb;
 }
 
-// Handle the request through a proxy
+// handle the request through a proxy
 std::string handle_request(const std::string& url, const std::string& proxy_with_auth) {
     CURL *curl = curl_easy_init();
     std::string response;
@@ -82,40 +82,63 @@ std::string handle_request(const std::string& url, const std::string& proxy_with
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
 
-        auto start = std::chrono::high_resolution_clock::now();
         CURLcode res = curl_easy_perform(curl);
-        auto end = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> elapsed = end - start;
+
+        double connect_time, app_connect_time, proxy_connect_time, start_transfer_time, total_time, redirect_time;
+        curl_off_t speed_download, speed_upload;
+        long redirect_count;
+        char* last_effective_url;
+
+        // analytics
+        curl_easy_getinfo(curl, CURLINFO_CONNECT_TIME, &connect_time);
+        curl_easy_getinfo(curl, CURLINFO_APPCONNECT_TIME, &app_connect_time);
+        proxy_connect_time = app_connect_time - connect_time;    // proxy connection time minus endpoint connection time without proxy
+        curl_easy_getinfo(curl, CURLINFO_STARTTRANSFER_TIME, &start_transfer_time);
+        curl_easy_getinfo(curl, CURLINFO_TOTAL_TIME, &total_time);
+        curl_easy_getinfo(curl, CURLINFO_SPEED_DOWNLOAD_T, &speed_download);
+        curl_easy_getinfo(curl, CURLINFO_SPEED_UPLOAD_T, &speed_upload);
+        curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &last_effective_url);
+        curl_easy_getinfo(curl, CURLINFO_REDIRECT_TIME, &redirect_time);
+        curl_easy_getinfo(curl, CURLINFO_REDIRECT_COUNT, &redirect_count);
+
+        std::cout << "Proxy connection time: " << connect_time << " sec\n";
+        std::cout << "Endpoint connection time: " << app_connect_time << " sec\n";
+        std::cout << "Proxy connection time to endpoint: " << proxy_connect_time << " sec\n";
+        std::cout << "Get the first byte: " << start_transfer_time << " sec\n";
+        std::cout << "Total request time: " << total_time << " sec\n";
+        std::cout << "Download: " << speed_download / 1024 << " KB/s\n";
+        std::cout << "Upload: " << speed_upload / 1024 << " KB/s\n";
+        std::cout << "Last effective URL: " << last_effective_url << "\n";
+        std::cout << "Redirect time: " << redirect_time << " KB/s\n";
+        std::cout << "Redirect count: " << redirect_count << "\n\n";
 
         if (res != CURLE_OK) {
             response = "Curl error: " + std::string(curl_easy_strerror(res));
-        } else {
-            response += "\nTime taken: " + std::to_string(elapsed.count()) + " seconds";
-        }
+        }   
 
         curl_easy_cleanup(curl);
     }
     return response;
 }
 
-// Handle connection with the client
+// handle connection with the client
 void handle_client(tcp::socket socket) {
     try {
         char data[1024];
         size_t length = socket.read_some(boost::asio::buffer(data));
         std::string request(data, length);
 
-        // Pasrsing string "logn + password + url"
+        // pasrsing string "logn + password + url"
         std::istringstream iss(request);
         std::string login, password, url;
         iss >> login >> password;
         std::getline(iss, url);
-        if (!url.empty() && url[0] == ' ') url.erase(0, 1); // Del space before URL
+        if (!url.empty() && url[0] == ' ') url.erase(0, 1); // remove space before URL
 
-        // Proxy without data for auth
+        // proxy without data for auth
         Proxy proxy = get_next_proxy();
 
-        // New proxy with auth
+        // new proxy with auth
         std::string proxy_with_auth = proxy.protocol + "://" + login + ":" + password + "@" + proxy.ip + ":" + std::to_string(proxy.port);
         std::cout << "Proxy: " << proxy_with_auth << '\n';
 
