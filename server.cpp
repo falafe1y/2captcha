@@ -81,10 +81,18 @@ std::string handle_request(const std::string& url, const std::string& proxy_with
         curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+
+        auto start = std::chrono::high_resolution_clock::now();
         CURLcode res = curl_easy_perform(curl);
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> elapsed = end - start;
+
         if (res != CURLE_OK) {
-            std::cerr << "Curl error: " << curl_easy_strerror(res) << std::endl;
+            response = "Curl error: " + std::string(curl_easy_strerror(res));
+        } else {
+            response += "\nTime taken: " + std::to_string(elapsed.count()) + " seconds";
         }
+
         curl_easy_cleanup(curl);
     }
     return response;
