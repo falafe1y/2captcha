@@ -62,7 +62,6 @@ Proxy get_next_proxy() {
     if (proxies.empty()) throw std::runtime_error("No proxies available");
     Proxy proxy = proxies[current_proxy_index];
     current_proxy_index = (current_proxy_index + 1) % proxies.size();
-    std::cout << "Proxy: " << proxy.protocol << "://" << proxy.username << ':' << proxy.password << '@' << proxy.ip << ':' << proxy.port << '\n';
     return proxy;
 }
 
@@ -72,21 +71,12 @@ size_t write_callback(void* ptr, size_t size, size_t nmemb, std::string* data) {
 }
 
 // Handle the request through a proxy
-std::string handle_request(const std::string &url) {
-    Proxy proxy = get_next_proxy();
+std::string handle_request(const std::string& url, const std::string& proxy_with_auth) {
     CURL *curl = curl_easy_init();
     std::string response;
     if (curl) {
         curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-        std::string proxy_address = proxy.ip + ":" + std::to_string(proxy.port);
-        curl_easy_setopt(curl, CURLOPT_PROXY, proxy_address.c_str());
-        if (proxy.protocol == "socks5") {
-            curl_easy_setopt(curl, CURLOPT_PROXYTYPE, CURLPROXY_SOCKS5);
-        }
-        if (!proxy.username.empty() && !proxy.password.empty()) {
-            std::string proxy_auth = proxy.username + ":" + proxy.password;
-            curl_easy_setopt(curl, CURLOPT_PROXYUSERPWD, proxy_auth.c_str());
-        }
+        curl_easy_setopt(curl, CURLOPT_PROXY, proxy_with_auth.c_str());
         curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
         curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
@@ -105,8 +95,23 @@ void handle_client(tcp::socket socket) {
     try {
         char data[1024];
         size_t length = socket.read_some(boost::asio::buffer(data));
-        std::string client_url(data, length);
-        std::string response = handle_request(client_url);
+        std::string request(data, length);
+
+        // Pasrsing string "logn + password + url"
+        std::istringstream iss(request);
+        std::string login, password, url;
+        iss >> login >> password;
+        std::getline(iss, url);
+        if (!url.empty() && url[0] == ' ') url.erase(0, 1); // Del space before URL
+
+        // Proxy without data for auth
+        Proxy proxy = get_next_proxy();
+
+        // New proxy with auth
+        std::string proxy_with_auth = proxy.protocol + "://" + login + ":" + password + "@" + proxy.ip + ":" + std::to_string(proxy.port);
+        std::cout << "Proxy: " << proxy_with_auth << '\n';
+
+        std::string response = handle_request(url, proxy_with_auth);
         boost::asio::write(socket, boost::asio::buffer(response));
     } catch (const std::exception& e) {
         std::cerr << "Error processing request: " << e.what() << std::endl;

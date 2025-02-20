@@ -1,1 +1,1 @@
-socks5://u54ea530557a605db-zone-custom-region-eu:u54ea530557a605db@118.193.58.115:2333
+socks5://118.193.58.115:2333

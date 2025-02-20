@@ -5,5 +5,5 @@ cd build
 cmake ..
 make 
 cd ..
-cp http.txt build/ && cp socks5.txt build/
+cp http.txt build/ && cp socks5.txt build/ && cp script.py build/
 

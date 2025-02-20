@@ -13,6 +13,7 @@ First, install the dependencies:
 - For Ubuntu (Debian):
     ```
     sudo apt update
+    sudo apt install python3
     sudo apt install c++
     sudo apt install libboost-all-dev
     sudo apt install libcurl4-openssl-dev
@@ -23,13 +24,14 @@ First, install the dependencies:
 
     ```
     sudo apt update
-    sudo apt update c++ libboost-all-dev libcurl4-openssl-dev cmake
+    sudo apt update pytnon3 c++ libboost-all-dev libcurl4-openssl-dev cmake
     ```
 
 - For Arch (Manjaro etc.):
 
     ```
     sudo pacman -Syu
+    sudo pacman -S python3
     sudo pacman -S g++
     sudo pacman -S cmake
     sudo pacman -S curl
@@ -41,7 +43,7 @@ First, install the dependencies:
 
     ```
     sudo pacman -Syu
-    sudo pacman g++ cmake curl openssl boost boost-libs
+    sudo pacman python3 g++ cmake curl openssl boost boost-libs
     ```
 
 Okay, secondly, clone this repository:
@@ -66,7 +68,7 @@ cd 2captcha
 If the installation was successful, a directory called "build" should appear in the root 
 directory, which you need to go to. There will be two executable files inside - **server** and 
 **client**. Run server in one terminal, and client in another (when launching the client, you 
-must specify the target site):
+must specify auth data and target site):
 
 ```
 # First terminal
@@ -77,43 +79,14 @@ cd build
 ```
 # Second terminal
 cd build
-./client https://ip.oxylabs.io
+./client login password https://ip.oxylabs.io
 ```
 
-If you see something like this:
+If you see something like this in "client" terminal:
 ```
-Connected...
-URL from client: https://ip.oxylabs.io
-Proxy protocol: http
-------------------
-Response from proxy:
+Response from the server:
 
-REMOTE_ADDR = 54.205.235.55
-REMOTE_PORT = 65258
-REQUEST_METHOD = GET
-REQUEST_URI = /
-REQUEST_TIME_FLOAT = 1739662425.7612944
-REQUEST_TIME = 1739662425
-HTTP_HOST = ip.oxylabs.io
-HTTP_ACCEPT = */*
-```
-
-or this:
-```
-Connected...
-URL from client: https://ip.oxylabs.io
-Proxy protocol: socks5
-------------------
-Response from proxy:
-
-REMOTE_ADDR = 18.188.12.76
-REMOTE_PORT = 51715
-REQUEST_METHOD = GET
-REQUEST_URI = /
-REQUEST_TIME_FLOAT = 1739662428.3189354
-REQUEST_TIME = 1739662428
-HTTP_HOST = ip.oxylabs.io
-HTTP_ACCEPT = */*
+213.55.242.106
 ```
 
 then everything is done correctly. It's a success!
