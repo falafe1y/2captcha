@@ -17,7 +17,11 @@ const std::string PROXY_PASS = "u54ea530557a605db";
 std::string encode_base64(const std::string& input) {
     std::string output;
     output.resize(boost::beast::detail::base64::encoded_size(input.size()));
-    boost::beast::detail::base64::encode(output.data(), input.data(), input.size());
+    boost::beast::detail::base64::encode(
+        const_cast<char*>(output.data()),  // Приведение к void*
+        input.data(),
+        input.size()
+    );
     return output;
 }
 
@@ -25,8 +29,12 @@ std::string encode_base64(const std::string& input) {
 std::string decode_base64(const std::string& input) {
     std::string output;
     output.resize(boost::beast::detail::base64::decoded_size(input.size()));
-    auto result = boost::beast::detail::base64::decode(output.data(), input.data(), input.size());
-    output.resize(result.first); // Adjust output size after decoding
+    auto result = boost::beast::detail::base64::decode(
+        const_cast<char*>(output.data()),  // Приведение к void*
+        input.data(),
+        input.size()
+    );
+    output.resize(result.first);  // Устанавливаем корректный размер после декодирования
     return output;
 }
 
