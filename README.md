@@ -58,6 +58,9 @@ or via HTTPS:
 ```
 git clone https://github.com/falafe1y/2capthca.git
 ```
+In the _client.cpp_ file, change the IP address of the server on which the _server.cpp_ binary file is running.
+
+![image](https://github.com/user-attachments/assets/78433d2a-98df-48c4-bb8b-cb26c57e3543)
 
 Next, go to the root directory of the project and run the bash script for installation:
 
