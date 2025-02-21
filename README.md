@@ -18,6 +18,7 @@ First, install the dependencies:
     sudo apt-get install g++
     sudo apt-get install libboost-all-dev
     sudo apt-get install libcurl4-openssl-dev
+    sudo apt-get install libssl-dev
     sudo apt-get install cmake
     ```
 
@@ -25,7 +26,7 @@ First, install the dependencies:
 
     ```
     sudo apt update
-    sudo apt-get install pytnon3 g++ libboost-all-dev libcurl4-openssl-dev cmake
+    sudo apt-get install pytnon3 g++ libboost-all-dev libcurl4-openssl-dev libssl-dev cmake
     ```
 
 - For Arch (Manjaro etc.):
