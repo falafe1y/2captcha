@@ -43,7 +43,7 @@ First, install the dependencies:
 
     ```
     sudo pacman -Syu
-    sudo pacman python3 g++ cmake curl openssl boost boost-libs
+    sudo pacman -S python3 g++ cmake curl openssl boost boost-libs
     ```
 
 Okay, secondly, clone this repository:
