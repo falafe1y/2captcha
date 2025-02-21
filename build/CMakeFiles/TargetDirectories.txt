@@ -1,4 +1,0 @@
-/home/falaf/Projects/2capthca/build/CMakeFiles/server.dir
-/home/falaf/Projects/2capthca/build/CMakeFiles/client.dir
-/home/falaf/Projects/2capthca/build/CMakeFiles/edit_cache.dir
-/home/falaf/Projects/2capthca/build/CMakeFiles/rebuild_cache.dir
