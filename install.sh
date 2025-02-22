@@ -11,12 +11,12 @@ then
 	cmake ..
 	make 
 	cd ..
-	cp http.txt build/ && cp socks5.txt build/ && cp script.py build/
+	cp proxies.txt build/
 else
 	mkdir build
         cd build
         cmake ..
         make
         cd ..
-        cp http.txt build/ && cp socks5.txt build/ && cp script.py build/
+        cp proxies.txt build/
 fi
