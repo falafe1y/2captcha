@@ -18,7 +18,7 @@ std::string encode_base64(const std::string& input) {
     std::string output;
     output.resize(boost::beast::detail::base64::encoded_size(input.size()));
     boost::beast::detail::base64::encode(
-        const_cast<char*>(output.data()),  // Приведение к void*
+        const_cast<char*>(output.data()),  // casting to void*
         input.data(),
         input.size()
     );
@@ -30,11 +30,11 @@ std::string decode_base64(const std::string& input) {
     std::string output;
     output.resize(boost::beast::detail::base64::decoded_size(input.size()));
     auto result = boost::beast::detail::base64::decode(
-        const_cast<char*>(output.data()),  // Приведение к void*
+        const_cast<char*>(output.data()),  // casting to void*
         input.data(),
         input.size()
     );
-    output.resize(result.first);  // Устанавливаем корректный размер после декодирования
+    output.resize(result.first);  // resize data after decoding
     return output;
 }
 
