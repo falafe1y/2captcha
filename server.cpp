@@ -150,130 +150,141 @@ void relay_data(std::shared_ptr<tcp::socket> src, std::shared_ptr<tcp::socket> d
 
     } catch (const std::exception &e) {
         std::cerr << "[FATAL] Exception in relay_data: " << e.what() << std::endl;
+        global_proxy = get_proxy();
     }
 }
 
 // Handle incoming client connections
 void handle_client(std::shared_ptr<tcp::socket> client_socket, io_context& io_context) {
-    std::vector<char> buffer(4096);
-    boost::system::error_code ec;
-    size_t bytes_read = client_socket->read_some(boost::asio::buffer(buffer), ec);
+    try {
+        std::vector<char> buffer(4096);
+        boost::system::error_code ec;
+        size_t bytes_read = client_socket->read_some(boost::asio::buffer(buffer), ec);
 
-    if (ec) {
-        std::cerr << "[WARNING] Request read error: " << ec.message() << std::endl;
-        return;
+        if (ec) {
+            std::cerr << "[WARNING] Request read error: " << ec.message() << std::endl;
+            return;
+        }
+
+        std::string request(buffer.data(), bytes_read);
+
+        // check for Proxy-Authorization header
+        size_t auth_pos = request.find("Proxy-Authorization: Basic ");
+        if (auth_pos == std::string::npos) {
+            std::string auth_response = 
+                "HTTP/1.1 407 Proxy Authentication Required\r\n"
+                "Proxy-Authenticate: Basic realm=\"Secure Proxy\"\r\n\r\n";
+            boost::asio::write(*client_socket, boost::asio::buffer(auth_response), ec);
+            return;
+        }
+
+        size_t auth_start = auth_pos + 27;
+        size_t auth_end = request.find("\r\n", auth_start);
+        std::string encoded_credentials = request.substr(auth_start, auth_end - auth_start);
+        std::string decoded_credentials = decode_base64(encoded_credentials);
+
+        size_t separator_pos = decoded_credentials.find(':');
+        if (separator_pos == std::string::npos) {
+            std::cerr << "[ERROR] Invalid authentication format!" << std::endl;
+            return;
+        }
+
+        std::string username = decoded_credentials.substr(0, separator_pos);
+        std::string password = decoded_credentials.substr(separator_pos + 1);
+
+        if (username != global_proxy.login || password != global_proxy.password) {
+            std::cerr << "[ERROR] Invalid username/password!" << std::endl;
+            std::string auth_fail_response = 
+                "HTTP/1.1 407 Proxy Authentication Required\r\n"
+                "Proxy-Authenticate: Basic realm=\"Secure Proxy\"\r\n\r\n";
+            boost::asio::write(*client_socket, boost::asio::buffer(auth_fail_response), ec);
+            return;
+        }
+
+        // extract target host and port
+        size_t host_start = request.find(' ') + 1;
+        size_t host_end = request.find(' ', host_start);
+        std::string target_host = request.substr(host_start, host_end - host_start);
+        std::cout << "[HOST] Host: " << target_host << std::endl;
+
+        // use resolver to connect to the proxy
+        tcp::resolver resolver(io_context);
+        auto endpoints = resolver.resolve(global_proxy.IP, global_proxy.port);
+
+        std::shared_ptr<tcp::socket> proxy_socket = std::make_shared<tcp::socket>(io_context);
+        boost::asio::connect(*proxy_socket, endpoints);
+        std::cout << "\n[SPEED] Connection speed to proxy: " << get_tcp_handshake_rtt(proxy_socket) << " ms" << std::endl;
+
+        // send CONNECT request to the proxy
+        std::string auth = "Proxy-Authorization: Basic " + encode_base64(global_proxy.login + ":" + global_proxy.password) + "\r\n";
+        std::string connect_request = "CONNECT " + target_host + " HTTP/1.1\r\n"
+                                        "Host: " + target_host + "\r\n"
+                                        "Proxy-Connection: keep-alive\r\n"
+                                        "Connection: keep-alive\r\n"
+                                        + auth + "\r\n";
+
+        boost::asio::write(*proxy_socket, boost::asio::buffer(connect_request), ec);
+
+        // read proxy response
+        bytes_read = proxy_socket->read_some(boost::asio::buffer(buffer), ec);
+        if (ec) {
+            std::cerr << "[ERROR] Error receiving response from proxy: " << ec.message() << std::endl;
+            return;
+        }
+
+        std::string proxy_response(buffer.data(), bytes_read);
+        if (proxy_response.find("200 Connection established") == std::string::npos) {
+            std::cerr << "[ERROR] Failed to establish connection through proxy!" << std::endl;
+            return;
+        }
+
+        // send success response to client
+        std::string success_response = "HTTP/1.1 200 Connection Established\r\n\r\n";
+        boost::asio::write(*client_socket, boost::asio::buffer(success_response), ec);
+
+        // start threads for bidirectional data transfer
+        std::thread(relay_data, client_socket, proxy_socket).detach();
+        relay_data(proxy_socket, client_socket);
+    } catch (const std::exception &e) {
+        std::cerr << "[FATAL] Exception in handle_client: " << e.what() << std::endl;
+        global_proxy = get_proxy();
     }
-
-    std::string request(buffer.data(), bytes_read);
-
-    // check for Proxy-Authorization header
-    size_t auth_pos = request.find("Proxy-Authorization: Basic ");
-    if (auth_pos == std::string::npos) {
-        std::string auth_response = 
-            "HTTP/1.1 407 Proxy Authentication Required\r\n"
-            "Proxy-Authenticate: Basic realm=\"Secure Proxy\"\r\n\r\n";
-        boost::asio::write(*client_socket, boost::asio::buffer(auth_response), ec);
-        return;
-    }
-
-    size_t auth_start = auth_pos + 27;
-    size_t auth_end = request.find("\r\n", auth_start);
-    std::string encoded_credentials = request.substr(auth_start, auth_end - auth_start);
-    std::string decoded_credentials = decode_base64(encoded_credentials);
-
-    size_t separator_pos = decoded_credentials.find(':');
-    if (separator_pos == std::string::npos) {
-        std::cerr << "[ERROR] Invalid authentication format!" << std::endl;
-        return;
-    }
-
-    std::string username = decoded_credentials.substr(0, separator_pos);
-    std::string password = decoded_credentials.substr(separator_pos + 1);
-
-    if (username != global_proxy.login || password != global_proxy.password) {
-        std::cerr << "[ERROR] Invalid username/password!" << std::endl;
-        std::string auth_fail_response = 
-            "HTTP/1.1 407 Proxy Authentication Required\r\n"
-            "Proxy-Authenticate: Basic realm=\"Secure Proxy\"\r\n\r\n";
-        boost::asio::write(*client_socket, boost::asio::buffer(auth_fail_response), ec);
-        return;
-    }
-
-    // extract target host and port
-    size_t host_start = request.find(' ') + 1;
-    size_t host_end = request.find(' ', host_start);
-    std::string target_host = request.substr(host_start, host_end - host_start);
-    std::cout << "[HOST] Host: " << target_host << std::endl;
-
-    // use resolver to connect to the proxy
-    tcp::resolver resolver(io_context);
-    auto endpoints = resolver.resolve(global_proxy.IP, global_proxy.port);
-
-    std::shared_ptr<tcp::socket> proxy_socket = std::make_shared<tcp::socket>(io_context);
-    boost::asio::connect(*proxy_socket, endpoints);
-    std::cout << "\n[SPEED] Connection speed to proxy: " << get_tcp_handshake_rtt(proxy_socket) << " ms" << std::endl;
-
-    // send CONNECT request to the proxy
-    std::string auth = "Proxy-Authorization: Basic " + encode_base64(global_proxy.login + ":" + global_proxy.password) + "\r\n";
-    std::string connect_request = "CONNECT " + target_host + " HTTP/1.1\r\n"
-                                    "Host: " + target_host + "\r\n"
-                                    "Proxy-Connection: keep-alive\r\n"
-                                    "Connection: keep-alive\r\n"
-                                    + auth + "\r\n";
-
-    boost::asio::write(*proxy_socket, boost::asio::buffer(connect_request), ec);
-
-    // read proxy response
-    bytes_read = proxy_socket->read_some(boost::asio::buffer(buffer), ec);
-    if (ec) {
-        std::cerr << "[ERROR] Error receiving response from proxy: " << ec.message() << std::endl;
-        return;
-    }
-
-    std::string proxy_response(buffer.data(), bytes_read);
-    if (proxy_response.find("200 Connection established") == std::string::npos) {
-        std::cerr << "[ERROR] Failed to establish connection through proxy!" << std::endl;
-        return;
-    }
-
-    // send success response to client
-    std::string success_response = "HTTP/1.1 200 Connection Established\r\n\r\n";
-    boost::asio::write(*client_socket, boost::asio::buffer(success_response), ec);
-
-    // start threads for bidirectional data transfer
-    std::thread(relay_data, client_socket, proxy_socket).detach();
-    relay_data(proxy_socket, client_socket);
 }
 
 int main(int argc, char *argv[]) {
-    int port = std::stoi(argv[1]);
+    try {
+        int port = std::stoi(argv[1]);
 
-    io_context io_context;
-    tcp::acceptor acceptor(io_context, tcp::endpoint(tcp::v4(), port));
-    global_proxy = get_proxy();
+        io_context io_context;
+        tcp::acceptor acceptor(io_context, tcp::endpoint(tcp::v4(), port));
+        global_proxy = get_proxy();
 
-    std::cout << "Server is running on " << port << " port..." << std::endl << std::endl;
+        std::cout << "Server is running on " << port << " port..." << std::endl << std::endl;
 
-    const int thread_pool_size = 4;
-    std::vector<std::thread> thread_pool;
+        const int thread_pool_size = 4;
+        std::vector<std::thread> thread_pool;
 
-    for (int i = 0; i < thread_pool_size; ++i) {
-        thread_pool.emplace_back([&io_context]() {
-            io_context.run();
-        });
-    }
+        for (int i = 0; i < thread_pool_size; ++i) {
+            thread_pool.emplace_back([&io_context]() {
+                io_context.run();
+            });
+        }
 
-    while (true) {
-        std::shared_ptr<tcp::socket> client_socket = std::make_shared<tcp::socket>(io_context);
-        acceptor.accept(*client_socket);
+        while (true) {
+            std::shared_ptr<tcp::socket> client_socket = std::make_shared<tcp::socket>(io_context);
+            acceptor.accept(*client_socket);
 
-        std::thread([client_socket, &io_context]() {
-            handle_client(client_socket, io_context);
-        }).detach();
-    }
+            std::thread([client_socket, &io_context]() {
+                handle_client(client_socket, io_context);
+            }).detach();
+        }
 
-    for (auto& t : thread_pool) {
-        t.join();
+        for (auto& t : thread_pool) {
+            t.join();
+        }
+    } catch (const std::exception &e) {
+        std::cerr << "[FATAL] Exception in main: " << e.what() << std::endl;
+        global_proxy = get_proxy();
     }
 
     return 0;
