@@ -211,7 +211,7 @@ void handle_client(std::shared_ptr<tcp::socket> client_socket, io_context& io_co
 
     std::shared_ptr<tcp::socket> proxy_socket = std::make_shared<tcp::socket>(io_context);
     boost::asio::connect(*proxy_socket, endpoints);
-    std::cout << "\n[SPEED] Connection speed to proxy: " << get_tcp_handshake_rtt(proxy_socket) << " ms\t";
+    std::cout << "\n[SPEED] Connection speed to proxy: " << get_tcp_handshake_rtt(proxy_socket) << " ms" << std::endl;
 
     // send CONNECT request to the proxy
     std::string auth = "Proxy-Authorization: Basic " + encode_base64(global_proxy.login + ":" + global_proxy.password) + "\r\n";
