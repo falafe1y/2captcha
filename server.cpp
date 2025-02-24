@@ -1,4 +1,3 @@
-#include <mutex>
 #include <thread>
 #include <vector>
 #include <random>
@@ -15,14 +14,14 @@
 using namespace boost::asio;
 using ip::tcp;
 
-std::mutex mutex;
-
 struct Proxy {
     std::string IP;
     std::string port;
     std::string login;
     std::string password;
 };
+
+Proxy global_proxy;
 
 // Get random proxy from proxies list
 Proxy get_proxy() {
@@ -61,10 +60,7 @@ Proxy get_proxy() {
         std::random_device rd;
         std::mt19937 gen(rd());
         std::uniform_int_distribution<> dis(0, proxies.size() - 1);
-        std::cout << "\n\n\nIP: " << proxies[dis(gen)].IP << std::endl;
-        std::cout << "port: " << proxies[dis(gen)].port << std::endl;
-        std::cout << "login: " << proxies[dis(gen)].login << std::endl;
-        std::cout << "password: " << proxies[dis(gen)].password << std::endl << std::endl << std::endl;
+        std::cout << "Use proxy with IP: " << proxies[dis(gen)].IP << std::endl;    // debug info
         return proxies[dis(gen)];
     }
 
@@ -96,13 +92,61 @@ std::string decode_base64(const std::string& input) {
     return output;
 }
 
-// Function for data relay between client and server
-void relay_data(std::shared_ptr<tcp::socket> src, std::shared_ptr<tcp::socket> dst);
+// Data relay between client and server
+void relay_data(std::shared_ptr<tcp::socket> src, std::shared_ptr<tcp::socket> dst) {
+    try {
+        std::vector<char> data(4096);
+        while (src->is_open() && dst->is_open()) {
+            boost::system::error_code error;
+            size_t len = src->read_some(boost::asio::buffer(data), error);
+
+            if (error == boost::asio::error::eof) {
+                std::cerr << "[INFO] Connection closed by remote host.\n";
+                break;
+            } else if (error) {
+                std::cerr << "[ERROR] Read error (" << error.value() << "): " << error.message() << "\n";
+                break;
+            }
+
+            if (dst->is_open()) {
+                boost::asio::write(*dst, boost::asio::buffer(data.data(), len), error);
+                if (error) {
+                    std::cerr << "[ERROR] Write error (" << error.value() << "): " << error.message() << "\n";
+                    break;
+                }
+            } else {
+                std::cerr << "[WARNING] Destination socket is closed, skipping write.\n";
+                break;
+            }
+        }
+        
+        auto safe_close = [](std::shared_ptr<tcp::socket> sock, const std::string &name) {
+            if (sock->is_open()) {
+                boost::system::error_code ec;
+                sock->shutdown(tcp::socket::shutdown_both, ec);
+                if (ec) {
+                    std::cerr << "[WARNING] Failed to shutdown " << name << ": " << ec.message() << "\n";
+                }
+                sock->close(ec);
+                if (ec) {
+                    std::cerr << "[WARNING] Failed to close " << name << ": " << ec.message() << "\n";
+                } else {
+                    std::cout << "[INFO] " << name << " closed.\n";
+                }
+            }
+        };
+
+        safe_close(src, "Src");
+        safe_close(dst, "Dst");
+
+    } catch (const std::exception &e) {
+        std::cerr << "[FATAL] Exception in relay_data: " << e.what() << "\n";
+    }
+}
 
 // Function to handle incoming client connections
 void handle_client(std::shared_ptr<tcp::socket> client_socket, io_context& io_context) {
-    Proxy proxy = get_proxy();
-    std::vector<char> buffer(8192);
+    std::vector<char> buffer(4096);
     boost::system::error_code ec;
     size_t bytes_read = client_socket->read_some(boost::asio::buffer(buffer), ec);
 
@@ -112,7 +156,7 @@ void handle_client(std::shared_ptr<tcp::socket> client_socket, io_context& io_co
     }
 
     std::string request(buffer.data(), bytes_read);
-    std::cout << "Received request:\n" << request << std::endl;
+    // std::cout << "Received request:\n" << request << std::endl;
 
     if (request.find("CONNECT") != 0) {
         std::cerr << "Only CONNECT method is supported!\n";
@@ -143,7 +187,7 @@ void handle_client(std::shared_ptr<tcp::socket> client_socket, io_context& io_co
     std::string username = decoded_credentials.substr(0, separator_pos);
     std::string password = decoded_credentials.substr(separator_pos + 1);
 
-    if (username != proxy.login || password != proxy.password) {
+    if (username != global_proxy.login || password != global_proxy.password) {
         std::cerr << "Invalid username/password!\n";
         std::string auth_fail_response = 
             "HTTP/1.1 407 Proxy Authentication Required\r\n"
@@ -160,13 +204,13 @@ void handle_client(std::shared_ptr<tcp::socket> client_socket, io_context& io_co
 
     // Use resolver to connect to the proxy
     tcp::resolver resolver(io_context);
-    auto endpoints = resolver.resolve(proxy.IP, proxy.port);
+    auto endpoints = resolver.resolve(global_proxy.IP, global_proxy.port);
 
     std::shared_ptr<tcp::socket> proxy_socket = std::make_shared<tcp::socket>(io_context);
     boost::asio::connect(*proxy_socket, endpoints);
 
     // Send CONNECT request to the proxy
-    std::string auth = "Proxy-Authorization: Basic " + encode_base64(proxy.login + ":" + proxy.password) + "\r\n";
+    std::string auth = "Proxy-Authorization: Basic " + encode_base64(global_proxy.login + ":" + global_proxy.password) + "\r\n";
     std::string connect_request = "CONNECT " + target_host + " HTTP/1.1\r\n"
                                     "Host: " + target_host + "\r\n"
                                     "Proxy-Connection: keep-alive\r\n"
@@ -197,55 +241,11 @@ void handle_client(std::shared_ptr<tcp::socket> client_socket, io_context& io_co
     relay_data(proxy_socket, client_socket);
 }
 
-void relay_data(std::shared_ptr<tcp::socket> src, std::shared_ptr<tcp::socket> dst) {
-    try {
-        mutex.lock();
-        std::cout << "Relay_data is called\n";
-        std::vector<char> data(1024);
-        while (src->is_open() && dst->is_open()) {
-            boost::system::error_code error;
-            size_t len = src->read_some(buffer(data), error);
-
-            if (error == boost::asio::error::eof) {
-                std::cerr << "Connection closed by remote host: " << error.message() << std::endl;
-                break;
-            }
-            else if (error) {
-                std::cerr << "Read error: " << error.message() << std::endl;
-                break;
-            }
-
-            boost::asio::write(*dst, buffer(data.data(), len), error);
-            if (error) {
-                std::cerr << "Write error: " << error.message() << std::endl;
-                break;
-            }
-        }
-
-        // Close socket
-        if (src->is_open()) {
-            src->shutdown(tcp::socket::shutdown_both);
-            src->close();
-            std::cout << "Src is closed\n";
-
-        }
-        if (dst->is_open()) {
-            dst->shutdown(tcp::socket::shutdown_both);
-            dst->close();
-            std::cout << "Dst is closed\n";
-        }
-
-        mutex.unlock();
-
-    } catch (const std::exception &e) {
-        std::cerr << "Error while transferring data: " << e.what() << std::endl;
-    }
-}
-
 int main() {
     int port = 8080;
     io_context io_context;
     tcp::acceptor acceptor(io_context, tcp::endpoint(tcp::v4(), port));
+    global_proxy = get_proxy();
 
     std::cout << "Server is running on " << port << " port...\n";
 
