@@ -211,7 +211,7 @@ void handle_client(std::shared_ptr<tcp::socket> client_socket, io_context& io_co
 
     std::shared_ptr<tcp::socket> proxy_socket = std::make_shared<tcp::socket>(io_context);
     boost::asio::connect(*proxy_socket, endpoints);
-    std::cout << "\n[SPEED] Proxy: " << get_tcp_handshake_rtt(proxy_socket) << " ms\t";
+    std::cout << "\n[SPEED] Connection speed to proxy: " << get_tcp_handshake_rtt(proxy_socket) << " ms\t";
 
     // send CONNECT request to the proxy
     std::string auth = "Proxy-Authorization: Basic " + encode_base64(global_proxy.login + ":" + global_proxy.password) + "\r\n";
@@ -229,7 +229,6 @@ void handle_client(std::shared_ptr<tcp::socket> client_socket, io_context& io_co
         std::cerr << "[ERROR] Error receiving response from proxy: " << ec.message() << std::endl;
         return;
     }
-    std::cout << "Server: " << get_tcp_handshake_rtt(proxy_socket) << " ms" << std::endl;
 
     std::string proxy_response(buffer.data(), bytes_read);
     if (proxy_response.find("200 Connection established") == std::string::npos) {
