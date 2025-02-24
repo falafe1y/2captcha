@@ -200,7 +200,7 @@ void handle_client(std::shared_ptr<tcp::socket> client_socket, io_context& io_co
 void relay_data(std::shared_ptr<tcp::socket> src, std::shared_ptr<tcp::socket> dst) {
     try {
         mutex.lock();
-        std::cout << "Relay_data вызван\n";
+        std::cout << "Relay_data is called\n";
         std::vector<char> data(1024);
         while (src->is_open() && dst->is_open()) {
             boost::system::error_code error;
@@ -208,14 +208,6 @@ void relay_data(std::shared_ptr<tcp::socket> src, std::shared_ptr<tcp::socket> d
 
             if (error == boost::asio::error::eof) {
                 std::cerr << "Connection closed by remote host: " << error.message() << std::endl;
-                if (src->is_open()) {
-                    src->shutdown(tcp::socket::shutdown_both);
-                    src->close();
-                }
-                if (dst->is_open()) {
-                    dst->shutdown(tcp::socket::shutdown_both);
-                    dst->close();
-                }
                 break;
             }
             else if (error) {
@@ -234,12 +226,15 @@ void relay_data(std::shared_ptr<tcp::socket> src, std::shared_ptr<tcp::socket> d
         if (src->is_open()) {
             src->shutdown(tcp::socket::shutdown_both);
             src->close();
+            std::cout << "Src is closed\n";
+
         }
         if (dst->is_open()) {
             dst->shutdown(tcp::socket::shutdown_both);
             dst->close();
+            std::cout << "Dst is closed\n";
         }
-        
+
         mutex.unlock();
 
     } catch (const std::exception &e) {
